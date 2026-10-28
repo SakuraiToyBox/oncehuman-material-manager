@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1f2933; --sub:#6b7785; --line:#e1e5ea; --pri:#2563eb; --ng:#dc2626; --ok:#16a34a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2229; --fg:#e6e9ee; --sub:#8b95a3; --line:#2c333c; --pri:#5b8def; --ng:#f87171; --ok:#4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:12px 16px; font-weight:700; border-bottom:1px solid var(--line); background:var(--card); }
+  nav { display:flex; overflow-x:auto; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  nav button { flex:1; min-width:72px; padding:10px 8px; border:0; background:none; color:var(--sub); font:inherit; cursor:pointer; border-bottom:3px solid transparent; }
+  nav button.on { color:var(--pri); border-bottom-color:var(--pri); font-weight:700; }
+  main { padding:12px; max-width:760px; margin:0 auto; }
+  section { display:none; } section.on { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  h2 { font-size:15px; margin:0 0 8px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--sub); font-weight:600; font-size:12px; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .ng { color:var(--ng); font-weight:700; } .ok { color:var(--ok); }
+  input, select, textarea { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px; width:100%; }
+  textarea { min-height:200px; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
+  .row { display:flex; gap:8px; margin-bottom:8px; } .row > * { flex:1; } .row > .s { flex:0 0 90px; }
+  button.b { padding:9px 14px; border:0; border-radius:8px; background:var(--pri); color:#fff; font:inherit; cursor:pointer; }
+  button.b.g { background:var(--line); color:var(--fg); }
+  button.b:disabled { opacity:.5; }
+  .muted { color:var(--sub); font-size:13px; }
+  #msg { position:fixed; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:8px; color:#fff; display:none; z-index:10; max-width:736px; margin:0 auto; }
+  #msg.ok { background:#16a34a; } #msg.er { background:#dc2626; }
+</style>
+</head>
+<body>
+<header>Once Human クラフト管理</header>
+<nav id="tabs">
+  <button data-t="calc" class="on">不足計算</button>
+  <button data-t="stock">在庫</button>
+  <button data-t="deliver">納品</button>
+  <button data-t="recipe">レシピ</button>
+  <button data-t="set">設定</button>
+</nav>
+<main>
+  <section id="calc" class="on">
+    <div class="card">
+      <h2>作りたいもの</h2>
+      <div id="targets"></div>
+      <div class="row">
+        <button class="b g" id="addTarget">+ 行を追加</button>
+        <button class="b" id="saveTargets">目標を保存</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>必要素材と不足</h2>
+      <div id="result" class="muted">目標を入力してください</div>
+      <div class="row" style="margin-top:10px"><button class="b g" id="copyShort">不足リストをコピー</button><button class="b" id="notify">Discordに通知</button></div>
+    </div>
+    <div class="card">
+      <h2>作成手順(中間素材)</h2>
+      <div id="crafts" class="muted">-</div>
+    </div>
+  </section>
+
+  <section id="stock">
+    <div class="card">
+      <h2>共有在庫</h2>
+      <div class="row"><input id="stockFilter" placeholder="素材名で絞り込み"></div>
+      <table><thead><tr><th>素材</th><th class="n">数量</th><th></th></tr></thead><tbody id="stockBody"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>在庫を直接設定(棚卸し)</h2>
+      <div class="row"><input id="ssName" list="matList" placeholder="素材名"><input id="ssQty" class="s" type="number" placeholder="数量"></div>
+      <button class="b" id="ssBtn">設定</button>
+    </div>
+  </section>
+
+  <section id="deliver">
+    <div class="card">
+      <h2>納品する(在庫に加算)</h2>
+      <div class="row"><input id="dvMember" placeholder="メンバー名"></div>
+      <div class="row"><input id="dvName" list="matList" placeholder="素材名"><input id="dvQty" class="s" type="number" placeholder="数量"></div>
+      <button class="b" id="dvBtn">納品</button>
+    </div>
+    <div class="card">
+      <h2>貢献ランキング(直近100件)</h2>
+      <div id="rank" class="muted">-</div>
+    </div>
+    <div class="card">
+      <h2>納品ログ</h2>
+      <table><thead><tr><th>日時</th><th>名前</th><th>素材</th><th class="n">数</th></tr></thead><tbody id="logBody"></tbody></table>
+    </div>
+  </section>
+
+  <section id="recipe">
+    <div class="card">
+      <h2>レシピ編集</h2>
+      <p class="muted">1行1素材。「アイテム,素材,必要数[,1回の生産数]」(カンマかタブ区切り)。#で始まる行はコメント。素材が別アイテムのレシピに載っていれば自動で再帰展開されます。保存すると全置換されます。</p>
+      <textarea id="recipeText"></textarea>
+      <div class="row" style="margin-top:8px"><button class="b" id="saveRecipes">レシピを保存</button></div>
+    </div>
+  </section>
+
+  <section id="set">
+    <div class="card">
+      <h2>合言葉</h2>
+      <p class="muted" id="passInfo"></p>
+      <div class="row"><input id="pass" type="password" placeholder="合言葉(書き込み時に必要)"></div>
+      <button class="b" id="passBtn">この端末に保存</button>
+    </div>
+    <div class="card">
+      <h2>メモ</h2>
+      <p class="muted">合言葉とDiscord Webhookは、Apps Scriptの「プロジェクトの設定 → スクリプト プロパティ」で PASSPHRASE / DISCORD_WEBHOOK として設定します。</p>
+      <button class="b g" id="reload">データを再読み込み</button>
+    </div>
+  </section>
+</main>
+<datalist id="matList"></datalist>
+<div id="msg"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api = (fn, ...a) => new Promise((res, rej) =>
+  google.script.run.withSuccessHandler(res).withFailureHandler(e => rej(new Error(e && e.message ? e.message : String(e)))) [fn](...a));
+
+let D = { recipes: [], stock: {}, log: [], targets: [], needPass: false, hasWebhook: false };
+let targets = [];
+let pass = '';
+try { pass = localStorage.getItem('ohpass') || ''; } catch (e) {}
+
+let msgTimer;
+function toast(t, ok) {
+  const m = $('msg'); m.textContent = t; m.className = ok ? 'ok' : 'er'; m.style.display = 'block';
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => m.style.display = 'none', ok ? 2200 : 5000);
+}
+async function run(fn, ...a) {
+  try { const r = await api(fn, ...a); return r; }
+  catch (e) { toast(e.message, false); throw e; }
+}
+
+/* ---- tabs ---- */
+$('tabs').addEventListener('click', e => {
+  const t = e.target.dataset && e.target.dataset.t; if (!t) return;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b === e.target));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === t));
+});
+
+/* ---- 計算 ---- */
+function expand(tgts, recipes, stock) {
+  const byItem = {};
+  recipes.forEach(r => {
+    const e = byItem[r.item] || (byItem[r.item] = { yield: r.yield || 1, mats: [] });
+    e.mats.push({ m: r.material, q: r.qty });
+  });
+  const st = Object.assign({}, stock);
+  const raw = {}, crafts = {};
+  function need(name, qty, depth) {
+    if (depth > 20 || qty <= 0) return;
+    const have = st[name] || 0, use = Math.min(have, qty);
+    st[name] = have - use; qty -= use;
+    if (qty <= 0) return;
+    const rec = byItem[name];
+    if (!rec) { raw[name] = (raw[name] || 0) + qty; return; }
+    const times = Math.ceil(qty / rec.yield);
+    crafts[name] = (crafts[name] || 0) + times;
+    rec.mats.forEach(x => need(x.m, x.q * times, depth + 1));
+  }
+  tgts.forEach(t => need(t.item, t.count, 0));
+  return { raw, crafts };
+}
+
+function renderTargets() {
+  const box = $('targets');
+  box.innerHTML = '';
+  if (!targets.length) targets.push({ item: '', count: 1 });
+  targets.forEach((t, i) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const a = document.createElement('input'); a.setAttribute('list', 'itemList'); a.placeholder = 'アイテム名'; a.value = t.item;
+    const b = document.createElement('input'); b.type = 'number'; b.min = 1; b.className = 's'; b.value = t.count;
+    const x = document.createElement('button'); x.className = 'b g s'; x.textContent = '×'; x.style.flex = '0 0 44px';
+    a.oninput = () => { t.item = a.value.trim(); calc(); };
+    b.oninput = () => { t.count = Number(b.value) || 0; calc(); };
+    x.onclick = () => { targets.splice(i, 1); renderTargets(); calc(); };
+    row.append(a, b, x); box.appendChild(row);
+  });
+}
+
+let lastShort = [];
+function calc() {
+  const valid = targets.filter(t => t.item && t.count > 0);
+  const el = $('result'), ce = $('crafts');
+  if (!valid.length) { el.className = 'muted'; el.textContent = '目標を入力してください'; ce.textContent = '-'; lastShort = []; return; }
+  const gross = expand(valid, D.recipes, {}).raw;
+  const net = expand(valid, D.recipes, D.stock);
+  const names = Object.keys(gross).sort((a, b) => a.localeCompare(b, 'ja'));
+  lastShort = [];
+  let h = '<table><thead><tr><th>素材</th><th class="n">必要</th><th class="n">在庫</th><th class="n">不足</th></tr></thead><tbody>';
+  names.forEach(n => {
+    const lack = net.raw[n] || 0;
+    if (lack > 0) lastShort.push([n, lack]);
+    h += '<tr><td>' + esc(n) + '</td><td class="n">' + gross[n] + '</td><td class="n">' + (D.stock[n] || 0) +
+      '</td><td class="n ' + (lack > 0 ? 'ng' : 'ok') + '">' + (lack > 0 ? lack : 'OK') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  el.className = ''; el.innerHTML = h;
+  const cn = Object.keys(net.crafts);
+  ce.innerHTML = cn.length ? cn.map(n => esc(n) + ' × ' + net.crafts[n] + '回').join('<br>') : '中間素材の作成は不要です';
+}
+
+$('addTarget').onclick = () => { targets.push({ item: '', count: 1 }); renderTargets(); };
+$('saveTargets').onclick = async () => {
+  await run('saveTargets', pass, targets.filter(t => t.item && t.count > 0)); toast('目標を保存しました', true);
+};
+function shortText() {
+  const items = targets.filter(t => t.item && t.count > 0).map(t => t.item + '×' + t.count).join(', ');
+  return '【不足素材】' + items + '\n' + lastShort.map(([n, q]) => '・' + n + ' ×' + q).join('\n');
+}
+$('copyShort').onclick = async () => {
+  if (!lastShort.length) return toast('不足している素材はありません', true);
+  try { await navigator.clipboard.writeText(shortText()); toast('コピーしました', true); }
+  catch (e) { prompt('コピーしてください', shortText()); }
+};
+$('notify').onclick = async () => {
+  if (!lastShort.length) return toast('不足している素材はありません', true);
+  await run('notifyDiscord', pass, shortText()); toast('Discordに通知しました', true);
+};
+
+/* ---- 在庫 ---- */
+function renderStock() {
+  const f = $('stockFilter').value.trim().toLowerCase();
+  const names = Object.keys(D.stock).filter(n => n.toLowerCase().includes(f)).sort((a, b) => a.localeCompare(b, 'ja'));
+  $('stockBody').innerHTML = names.map(n =>
+    '<tr><td>' + esc(n) + '</td><td class="n">' + D.stock[n] + '</td><td class="n"><button class="b g" data-n="' + esc(n) + '">編集</button></td></tr>').join('') ||
+    '<tr><td colspan="3" class="muted">在庫がありません</td></tr>';
+}
+$('stockFilter').oninput = renderStock;
+$('stockBody').onclick = e => {
+  const n = e.target.dataset && e.target.dataset.n; if (!n) return;
+  $('ssName').value = n; $('ssQty').value = D.stock[n]; $('ssQty').focus();
+};
+$('ssBtn').onclick = async () => {
+  const n = $('ssName').value.trim(), q = $('ssQty').value;
+  if (!n || q === '') return toast('素材名と数量を入力してください', false);
+  await run('setStock', pass, n, Number(q)); toast('更新しました', true); await load();
+};
+
+/* ---- 納品 ---- */
+$('dvBtn').onclick = async () => {
+  const m = $('dvMember').value.trim(), n = $('dvName').value.trim(), q = Number($('dvQty').value);
+  if (!m || !n || !(q > 0)) return toast('名前・素材・数量(1以上)を入力してください', false);
+  try { localStorage.setItem('ohmember', m); } catch (e) {}
+  await run('deliver', pass, m, n, q); toast('納品しました', true);
+  $('dvName').value = ''; $('dvQty').value = ''; await load();
+};
+function renderLog() {
+  $('logBody').innerHTML = D.log.map(l =>
+    '<tr><td>' + esc(l.time) + '</td><td>' + esc(l.member) + '</td><td>' + esc(l.material) + '</td><td class="n">' + l.qty + '</td></tr>').join('') ||
+    '<tr><td colspan="4" class="muted">ログはまだありません</td></tr>';
+  const sum = {};
+  D.log.forEach(l => { sum[l.member] = (sum[l.member] || 0) + l.qty; });
+  const r = Object.entries(sum).sort((a, b) => b[1] - a[1]);
+  $('rank').innerHTML = r.length ? r.map(([n, q], i) => (i + 1) + '. ' + esc(n) + ' … ' + q).join('<br>') : '-';
+}
+
+/* ---- レシピ ---- */
+function renderRecipeText() {
+  $('recipeText').value = D.recipes.map(r => [r.item, r.material, r.qty, r.yield].join(',')).join('\n');
+}
+$('saveRecipes').onclick = async () => {
+  if (!confirm('レシピを全置換して保存します。よろしいですか?')) return;
+  const n = await run('saveRecipes', pass, $('recipeText').value);
+  toast(n + '行を保存しました', true); await load();
+};
+
+/* ---- 設定 ---- */
+$('passBtn').onclick = () => {
+  pass = $('pass').value;
+  try { localStorage.setItem('ohpass', pass); } catch (e) {}
+  toast('保存しました', true);
+};
+$('reload').onclick = () => load();
+
+/* ---- 読み込み ---- */
+function fillLists() {
+  const mats = new Set(Object.keys(D.stock)), items = new Set();
+  D.recipes.forEach(r => { items.add(r.item); mats.add(r.material); });
+  $('matList').innerHTML = [...mats].map(n => '<option value="' + esc(n) + '">').join('');
+  let il = $('itemList');
+  if (!il) { il = document.createElement('datalist'); il.id = 'itemList'; document.body.appendChild(il); }
+  il.innerHTML = [...items].map(n => '<option value="' + esc(n) + '">').join('');
+}
+async function load() {
+  try {
+    D = await api('getData');
+  } catch (e) { return toast('読み込み失敗: ' + e.message, false); }
+  if (!targets.length || (targets.length === 1 && !targets[0].item)) targets = D.targets.length ? D.targets.map(t => ({ ...t })) : [];
+  $('passInfo').textContent = D.needPass ? '書き込みには合言葉が必要です。' : '合言葉は未設定です(誰でも書き込めます)。';
+  $('notify').style.display = D.hasWebhook ? '' : 'none';
+  $('pass').value = pass;
+  fillLists(); renderTargets(); calc(); renderStock(); renderLog(); renderRecipeText();
+}
+try { $('dvMember').value = localStorage.getItem('ohmember') || ''; } catch (e) {}
+load();
+</script>
+</body>
+</html>
